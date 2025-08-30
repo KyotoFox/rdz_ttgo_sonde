@@ -298,9 +298,9 @@ void ConnSondehub::sondehub_client_fsm() {
 
     default:
         LOG_I(TAG, "SH_FSM in state %d (%s)\n", shclient_state, state2str(shclient_state));
-        LOG_E(TAG, "UNHANDLED CASE: SHOULD NOT HAPPEN*****");
+        LOG_E(TAG, "UNHANDLED CASE: SHOULD NOT HAPPEN*****\n");
     }
-    LOG_I(TAG, "FSM RETURNING*****");
+    LOG_I(TAG, "FSM RETURNING*****\n");
     return;
 
 error:
