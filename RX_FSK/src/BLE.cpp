@@ -150,6 +150,7 @@ void BLE::init(void) {
     // NimBLEDevice::setSecurityAuth(false, false, true);
 
     NimBLEDevice::setSecurityAuth(/*BLE_SM_PAIR_AUTHREQ_BOND | BLE_SM_PAIR_AUTHREQ_MITM |*/ BLE_SM_PAIR_AUTHREQ_SC);
+    
     pServer = NimBLEDevice::createServer();
     pServer->setCallbacks(&serverCallbacks);
 
