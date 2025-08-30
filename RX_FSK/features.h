@@ -7,10 +7,11 @@
 // APRS includes AXUDP (e.g. for aprsmap) and APRS-IS (TCP) (e.g. for wettersonde.net, radiosondy.info)
 #define FEATURE_SONDEHUB 1
 
-#define FEATURE_CHASEMAPPER 1
+#define FEATURE_CHASEMAPPER 0
 #define FEATURE_MQTT 1
-#define FEATURE_SDCARD 1
-#define FEATURE_APRS 1
+#define FEATURE_SDCARD 0
+#define FEATURE_APRS 0
+#define FEATURE_BLE 1
 
 
 // Additional optional components

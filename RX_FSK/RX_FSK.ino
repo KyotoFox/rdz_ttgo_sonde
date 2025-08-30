@@ -1,4 +1,5 @@
 #include "features.h"
+//#define REMOVE_ALL_FOR_TESTING
 #include "version.h"
 #include "core.h"
 
@@ -56,6 +57,9 @@
 #endif
 #if FEATURE_SONDEHUB
 #include "src/conn-sondehub.h"
+#endif
+#if FEATURE_BLE
+#include "src/BLE.h"
 #endif
 
 #include "src/conn-system.h"
@@ -2166,6 +2170,11 @@ void setup()
 #endif
 #if FEATURE_SDCARD
   connSDCard.init();
+#endif
+#if FEATURE_BLE
+    Serial.println("Starting BLE");
+    bleInstance.init();
+    Serial.println("BLE Started!");
 #endif
 
   enableLocalUpdates();   // check if local updates from other servers is allowed
