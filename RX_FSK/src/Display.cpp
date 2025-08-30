@@ -520,9 +520,15 @@ void ILI9225Display::begin() {
 	if(sonde.config.type == TYPE_M5_CORE2 || sonde.config.type == TYPE_M5_CORE ) {
 		bus = new Arduino_ESP32SPI( sonde.config.tft_rs, sonde.config.tft_cs,
 				sonde.config.oled_scl, sonde.config.oled_sda, sonde.config.sx1278_miso, VSPI);
-	} else {
+	}
+	// if we share the bus between SDcard and TFT then we must configure MISO even if the display's MISO is not configured/used
+	if( sonde.config.oled_scl == sonde.config.sd.clk) {
+		bus = new Arduino_ESP32SPI( sonde.config.tft_rs, sonde.config.tft_cs,
+				sonde.config.oled_scl, sonde.config.oled_sda, sonde.config.sd.miso, HSPI);
+        } else {
 		bus = new Arduino_ESP32SPI( sonde.config.tft_rs, sonde.config.tft_cs,
 				sonde.config.oled_scl, sonde.config.oled_sda, -1, HSPI);
+
 	}
 	if(_type == 3) 
 		tft = new Arduino_ILI9341(bus, sonde.config.oled_rst);
@@ -530,7 +536,9 @@ void ILI9225Display::begin() {
 		tft = new Arduino_ILI9342(bus, sonde.config.oled_rst);
 	else if(_type == 5) 
 		tft = new Arduino_ST7789(bus, sonde.config.oled_rst);
-	else 
+	else if(_type == 6)
+		tft = new Arduino_ST7796(bus, sonde.config.oled_rst);
+	else
 		tft = new Arduino_ILI9225(bus, sonde.config.oled_rst);
 	tft->begin(sonde.config.tft_spifreq);
 	tft->fillScreen(BLACK);
@@ -562,9 +570,12 @@ void ILI9225Display::setFont(uint8_t fontindex) {
 	}
 }
 
+// 0=OLED/SSD1306, 1=ILI9225, 2=OLED/SH1106, 3=ILI9341, 4=ILI9342, 5=ST7789, 6=ST7796)
+static uint16_t dispSize[7][2] = { {0,0}, {220,176}, {0,0}, {320,240}, {320,240}, {320,240}, {480,320} };
+
 void ILI9225Display::getDispSize(uint8_t *height, uint8_t *width, uint8_t *lineskip, uint8_t *colskip) {
-	if(height) *height = 176;
-	if(width) *width = 220;
+	if(height) *height = dispSize[sonde.config.disptype][1];
+	if(width) *width = dispSize[sonde.config.disptype][0];
 	switch(findex) {
 		case 0:
 			if(lineskip) *lineskip=10;

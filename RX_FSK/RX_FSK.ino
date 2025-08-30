@@ -43,6 +43,9 @@
 
 
 /* Data exchange connectors */
+#if FEATURE_SONDESEEKER
+#include "src/conn-sondeseeker.h"
+#endif
 #if FEATURE_CHASEMAPPER
 #include "src/conn-chasemapper.h"
 #endif
@@ -75,6 +78,9 @@ Conn *connectors[] = { &connSystem,
 #if FEATURE_CHASEMAPPER
 &connChasemapper,
 #endif
+#if FEATURE_SONDESEEKER
+&connSondeseeker,
+#endif
 #if FEATURE_MQTT
 &connMQTT,
 #endif
@@ -86,9 +92,9 @@ NULL };
 //#define ESP_MEM_DEBUG 1
 //int e;
 
-enum MainState { ST_DECODER, ST_SPECTRUM, ST_WIFISCAN, ST_UPDATE, ST_TOUCHCALIB };
-static MainState mainState = ST_WIFISCAN; // ST_WIFISCAN;
-const char *mainStateStr[5] = {"DECODER", "SPECTRUM", "WIFISCAN", "UPDATE", "TOUCHCALIB" };
+enum MainState { ST_DECODER, ST_SPECTRUM, ST_WIFISCAN, ST_UPDATE, ST_TOUCHCALIB, ST_RINEX_UPDATE, ST_FORMAT_SD };
+static MainState mainState = ST_WIFISCAN;
+const char *mainStateStr[] = {"DECODER", "SPECTRUM", "WIFISCAN", "UPDATE", "TOUCHCALIB", "RINEXUPDATE", "FORMATSD" };
 
 AsyncWebServer server(80);
 
@@ -110,6 +116,12 @@ const char *updateIno = "update.ino.bin";
 const char* ntpServer = "pool.ntp.org";
 const long  gmtOffset_sec = 0; //UTC
 const int   daylightOffset_sec = 0; //UTC
+
+// Authentication management
+// BootID is embedded in index.html so client can invalidate auth cookie after ttgo reboot
+// defaultUserLevel is read from user.txt
+char bootid[8];
+uint8_t defaultUserLevel = 2;
 
 boolean connected = false;
 WiFiUDP udp;
@@ -141,7 +153,7 @@ char *localUpdates = NULL;
 
 boolean forceReloadScreenConfig = false;
 
-enum KeyPress { KP_NONE = 0, KP_SHORT, KP_DOUBLE, KP_MID, KP_LONG };
+enum KeyPress { KP_NONE = 0, KP_SHORT, KP_DOUBLE, KP_MID, KP_LONG, KP_RINEX, KP_FORMAT };
 
 // "doublepress" is now also used to eliminate key glitch on TTGO T-Beam startup (SENSOR_VN/GPIO39)
 struct Button {
@@ -221,6 +233,9 @@ String processor(const String& var) {
     } else {
       return String("48,13");
     }
+  }
+  if (var == "BOOTID") {
+    return String(bootid);
   }
   if (var == "VERSION_NAME") {
     return String(version_name);
@@ -378,11 +393,12 @@ const char *handleLoginPost(AsyncWebServerRequest * request) {
   String preauth = preauthp->value();
   String auth = authp->value();
 
-  if (isValidUser(username.c_str(), preauth.c_str(), auth.c_str())) {
+  int ulvl = getUserPermissions(username.c_str(), preauth.c_str(), auth.c_str());
+  if(ulvl> 0) {
     // Generate a new session cookie
     char cookie[COOKIE_SIZE];
     generateRandomCookie(username.c_str(), cookie);
-    if(upgradeCookie(preauth.c_str(), cookie, 1)==0) {
+    if(upgradeCookie(preauth.c_str(), cookie, ulvl)==0) {
       // Set cookie and redirect
       AsyncWebServerResponse *response = request->beginResponse(302);
       response->addHeader("Location","/index.html");
@@ -393,6 +409,22 @@ const char *handleLoginPost(AsyncWebServerRequest * request) {
   }
   request->send(401, "text/plain", "Invalid credentials or session expired");
   return nullptr;
+}
+
+const char *getQRGAsJson() {
+  char *ptr = message;
+  strcpy(ptr, "{\"channels\":[");
+  for (int i = 0; i < sonde.config.maxsonde; i++) {
+    SondeInfo *si = &sonde.sondeList[i];
+    if (i > 0) {
+      strcat(ptr, ",");
+    }
+    sprintf(ptr + strlen(ptr),
+            "{\"channel\":%d, \"active\":%d, \"freq\":%.3f, \"launchsite\":\"%s\", \"type\":\"%s\"}",
+            i+1, si->active, si->freq, si->launchsite, sondeTypeStr[si->type]);
+  }
+  strcat(ptr, "]}");
+  return message;
 }
 
 const char *createQRGForm() {
@@ -757,6 +789,12 @@ struct st_configitems config_list[] = {
   {"cm.host", 63, &sonde.config.cm.host},
   {"cm.port", 0, &sonde.config.cm.port},
 #endif
+#if FEATURE_SONDESEEKER
+   /* Sondeseeker settings */
+   {"ss.active", -3, &sonde.config.ss.active},
+   {"ss.host", 63, &sonde.config.ss.host},
+   {"ss.port", 0, &sonde.config.ss.port},
+#endif
 #if FEATURE_MQTT
   /* MQTT */
   {"mqtt.active", 0, &sonde.config.mqtt.active},
@@ -929,11 +967,24 @@ const char *handleConfigPost(AsyncWebServerRequest * request) {
   return "";
 }
 
-const char *ctrlid[] = {"rx", "scan", "spec", "wifi", "rx2", "scan2", "spec2", "wifi2", "reboot"};
+const char *ctrlid[] = {"rx", "scan", "spec", "wifi", "rx2", "scan2", "spec2", "wifi2",
+#if FEATURE_RS92
+	"rinex",
+#endif
+#if FEATURE_SDCARD
+	"format",
+#endif
+        "reboot"};
 
 const char *ctrllabel[] = {"Receiver/next freq. (short keypress)", "Scanner (double keypress)", "Spectrum (medium keypress)", "WiFi (long keypress)",
                            "Button 2/next screen (short keypress)", "Button 2 (double keypress)", "Button 2 (medium keypress)", "Button 2 (long keypress)",
-                           "Reboot"
+#if FEATURE_RS92
+                           "Update RS92 RINEX eph",
+#endif
+#if FEATURE_SDCARD
+			   "Format SD Card",
+#endif
+			   "Reboot"
                           };
 
 const char *createControlForm() {
@@ -941,7 +992,7 @@ const char *createControlForm() {
   strcpy(ptr, HTMLHEAD);
   strcat(ptr, "</head>");
   HTMLBODY(ptr, "control.html");
-  for (int i = 0; i < 9; i++) {
+  for (int i = 0; i < sizeof(ctrllabel)/sizeof((ctrllabel)[0]); i++) {
     strcat(ptr, "<input class=\"ctlbtn\" type=\"submit\" name=\"");
     strcat(ptr, ctrlid[i]);
     strcat(ptr, "\" value=\"");
@@ -998,6 +1049,14 @@ const char *handleControlPost(AsyncWebServerRequest * request) {
     else if (param.equals("wifi2")) {
       Serial.println("equals wifi2");
       button2.pressed = KP_LONG;
+    }
+    else if (param.equals("rinex")) {
+      Serial.println("equals rinex");
+      button2.pressed = KP_RINEX;
+    }
+    else if (param.equals("format")) {
+      Serial.println("equals format");
+      button2.pressed = KP_FORMAT;
     }
     else if (param.equals("reboot")) {
       Serial.println("equals reboot");
@@ -1306,9 +1365,33 @@ const char *sendGPX(AsyncWebServerRequest * request) {
   return message;
 }
 
+bool isAuthenticated(AsyncWebServerRequest *request, int level) {
+  if(defaultUserLevel >= level)
+    return 1;
+  if(request->hasHeader("Cookie")) {
+    String cookieHdr = request->getHeader("Cookie")->value();
+    int start = cookieHdr.indexOf("SESSION=") + strlen("SESSION=");
+    if(start!=-1) {
+      int end = cookieHdr.indexOf(';', start);
+      String session = (end==-1) ? cookieHdr.substring(start) : cookieHdr.substring(start, end);
+      session.trim();
+      int ulvl = getCookieAuthLevel(session.c_str());
+      if(ulvl >= level) {
+        return 1;
+      }
+    }
+  }
+  request->send(401, "text/plain", "Permission denied");
+  return false;
+}
+
 const char* PARAM_MESSAGE = "message";
+
 void SetupAsyncServer() {
   Serial.println("SetupAsyncServer()\n");
+  for(int i=0; i<7; i++) { bootid[i]=random(26)+'A'; }
+  bootid[7] = 0;
+  defaultUserLevel = getDefaultAuthLevel();
   server.reset();
   // Route for root / web page
   server.on("/", HTTP_GET, [](AsyncWebServerRequest * request) {
@@ -1319,39 +1402,38 @@ void SetupAsyncServer() {
     request->send(LittleFS, "/index.html", String(), false, processor);
   });
 
-  server.on("/test.html", HTTP_GET, [](AsyncWebServerRequest * request) {
-    request->send(LittleFS, "/test.html", String(), false, processor);
+  server.on("/qrg.json", HTTP_GET,  [](AsyncWebServerRequest * request) {
+    request->send(200, "text/html", getQRGAsJson());
   });
 
   server.on("/qrg.html", HTTP_GET,  [](AsyncWebServerRequest * request) {
     request->send(200, "text/html", createQRGForm());
   });
+ 
   server.on("/qrg.html", HTTP_POST, [](AsyncWebServerRequest * request) {
+    if(!isAuthenticated(request, 2)) return;
     handleQRGPost(request);
     request->send(200, "text/html", createQRGForm());
   });
 
   server.on("/wifi.html", HTTP_GET,  [](AsyncWebServerRequest * request) {
+    if(!isAuthenticated(request, 2)) return;
     request->send(200, "text/html", createWIFIForm());
   });
+  
   server.on("/wifi.html", HTTP_POST, [](AsyncWebServerRequest * request) {
+    if(!isAuthenticated(request, 2)) return;
     handleWIFIPost(request);
     request->send(200, "text/html", createWIFIForm());
   });
 
-
-  //  server.on("/map.html", HTTP_GET,  [](AsyncWebServerRequest * request) {
-  //    request->send(200, "text/html", createSondeHubMap());
-  //  });
-  //  server.on("/map.html", HTTP_POST, [](AsyncWebServerRequest * request) {
-  //    handleWIFIPost(request);
-  //    request->send(200, "text/html", createSondeHubMap());
-  //  });
-
   server.on("/config.html", HTTP_GET,  [](AsyncWebServerRequest * request) {
+    if(!isAuthenticated(request, 2)) return;
     request->send(200, "text/html", createConfigForm());
   });
+  
   server.on("/config.html", HTTP_POST, [](AsyncWebServerRequest * request) {
+    if(!isAuthenticated(request, 2)) return;
     handleConfigPost(request);
     request->send(200, "text/html", createConfigForm());
   });
@@ -1377,9 +1459,11 @@ void SetupAsyncServer() {
   });
 
   server.on("/control.html", HTTP_GET,  [](AsyncWebServerRequest * request) {
+    if(!isAuthenticated(request, 2)) return;
     request->send(200, "text/html", createControlForm());
   });
   server.on("/control.html", HTTP_POST, [](AsyncWebServerRequest * request) {
+    if(!isAuthenticated(request, 2)) return;
     handleControlPost(request);
     request->send(200, "text/html", createControlForm());
   });
@@ -1392,6 +1476,7 @@ void SetupAsyncServer() {
   });
 
   server.on("/file", HTTP_GET,  [](AsyncWebServerRequest * request) {
+    if(!isAuthenticated(request, 2)) return;
     String url = request->url();
     const char *filename = url.c_str() + 5;
     if (*filename == 0) {
@@ -1402,6 +1487,7 @@ void SetupAsyncServer() {
   });
   
   server.on("/file", HTTP_POST,  [](AsyncWebServerRequest * request) {
+    if(!isAuthenticated(request, 2)) return;
     request->send(200);
   }, handleUpload);
 #if FEATURE_SDCARD
@@ -1453,6 +1539,7 @@ void SetupAsyncServer() {
 #endif
 
   server.on("/edit.html", HTTP_GET,  [](AsyncWebServerRequest * request) {
+    if(!isAuthenticated(request, 2)) return;
     // new version:
     // Open file
     // store file object in request->_tempObject
@@ -1471,6 +1558,7 @@ void SetupAsyncServer() {
     });
   });
   server.on("/edit.html", HTTP_POST, [](AsyncWebServerRequest * request) {
+    if(!isAuthenticated(request, 2)) return;
     const char *ret = handleEditPost(request);
     if (ret == NULL)
       request->send(200, "text/html", "<html><head>ERROR</head><body><p>Something went wrong (probably ESP32 out of memory). Uploaded file is empty.</p></body></hhtml>");
@@ -1883,6 +1971,10 @@ int getKeyPressEvent() {
     p = getKey2Press();
     if (p == KP_NONE)
       return EVT_NONE;
+    if (p == KP_RINEX)
+      return EVT_RINEX;
+    if (p == KP_FORMAT)
+      return EVT_FORMAT;
     LOG_D(TAG, "Key 2 was pressed [%d]\n", p + 4);
     // maybe not the best place, but easy to do: check for B2 medium keypress to mute LED
     if(p == KP_MID && sonde.config.b2mute > 0) {
@@ -2213,7 +2305,7 @@ void enterMode(int mode) {
     disp.rdis->setFont(FONT_SMALL);
     specTimer = millis();
     //scanner.init();
-  } else if (mainState == ST_WIFISCAN) {
+  } else if (mainState == ST_WIFISCAN || mainState == ST_RINEX_UPDATE || mainState == ST_FORMAT_SD) {
     sonde.clearDisplay();
   }
 
@@ -2236,6 +2328,8 @@ static const char *action2text(uint8_t action) {
   if (action == ACT_DISPLAY_WIFI) return "Wifi Scan Display";
   if (action == ACT_NEXTSONDE) return "Go to next sonde";
   if (action == ACT_PREVSONDE) return "presonde (not implemented)";
+  if (action == ACT_RINEX_UPDATE) return "update RINEX eph data";
+  if (action == ACT_FORMAT_SD) return "format SD card";
   if (action == ACT_NONE) return "none";
   if (action >= 128) {
     snprintf(text, 40, "Sonde=%d", action & 127);
@@ -2281,9 +2375,28 @@ void loopDecoder() {
         enterMode(ST_WIFISCAN);
         return;
       }
+#if FEATURE_RS92
+      else if (action == ACT_RINEX_UPDATE) {
+        enterMode(ST_RINEX_UPDATE);
+        return;
+      }
+#endif
+      else if (action == ACT_FORMAT_SD) {
+        enterMode(ST_FORMAT_SD);
+        return;
+      }
+    }
+    // If action is to change to a different frequency, notify clients (MQTT and UDP-json for now)
+    // TODO: do the same for TCP-json (rdzjson)
+    if(ACT_IS_FREQ_CHANGE(action)) {
+#if FEATURE_SONDESEEKER
+      connSondeseeker.updateQRG(sonde.currentSonde);
+#endif
+#if FEATURE_MQTT
+      connMQTT.updateQRG(sonde.currentSonde);
+#endif
     }
   }
-
 
   if (rdzserver.hasClient()) {
     Serial.println("TCP JSON socket: new connection");
@@ -2321,12 +2434,12 @@ void loopDecoder() {
 #if FEATURE_CHASEMAPPER
       connChasemapper.updateSonde( s );
 #endif
+#if FEATURE_SONDESEEKER
+  connSondeseeker.updateSonde( s );
+#endif
     }
 #if FEATURE_SONDEHUB
-    if (sonde.config.sondehub.active) {
-        connSondehub.updateSonde( s );   // invoke sh_send_data....
-      // sondehub_send_data(&shclient, s, &sonde.config.sondehub);
-    }
+    connSondehub.updateSonde( s );   // invoke sh_send_data....
 #endif
 
 #if FEATURE_MQTT
@@ -2338,7 +2451,6 @@ void loopDecoder() {
   } else {
 #if FEATURE_SONDEHUB
     connSondehub.updateSonde( NULL );
-    // sondehub_finish_data(&shclient, s, &sonde.config.sondehub);
 #endif
   }
 
@@ -2932,6 +3044,34 @@ void loopWifiScan() {
   initialMode();
 }
 
+#if FEATURE_RS92
+// Rinex update...
+void execRinexUpdate() {
+   Serial.println("Fetching update for RINEX data...\n");
+   geteph();
+   Serial.println("Reading RINEX data...\n");
+   if (ephstate == EPH_PENDING) ephstate = EPH_ERROR;
+   get_eph("/brdc");
+   setCurrentDisplay(0);
+   enterMode(ST_DECODER);
+}
+#endif
+
+#if FEATURE_SDCARD
+void execFormatSD() {
+   Serial.println("format SD card\n");
+   if ( ISOLED(sonde.config) ) {
+       disp.rdis->setFont(FONT_SMALL);
+   } else {
+       disp.rdis->setFont(5);
+   }
+   disp.rdis->drawString(0, 0, "Format SD card");
+
+   connSDCard.format();
+   setCurrentDisplay(0);
+   enterMode(ST_DECODER);
+}
+#endif
 
 /// Testing OTA Updates
 /// somewhat based on Arduino's AWS_S3_OTA_Update
@@ -2939,6 +3079,7 @@ void loopWifiScan() {
 String getHeaderValue(String header, String headerName) {
   return header.substring(strlen(headerName.c_str()));
 }
+
 
 // OTA Logic
 void execOTA() {
@@ -3197,6 +3338,12 @@ void loop() {
     case ST_WIFISCAN: loopWifiScan(); break;
     case ST_UPDATE: execOTA(); break;
     case ST_TOUCHCALIB: loopTouchCalib(); break;
+#if FEATURE_RS92
+    case ST_RINEX_UPDATE: execRinexUpdate(); break;
+#endif
+#if FEATURE_SDCARD
+    case ST_FORMAT_SD: execFormatSD(); break;
+#endif
   }
 #if 0
   int rssi = sx1278.getRSSI();

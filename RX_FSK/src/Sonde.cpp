@@ -18,6 +18,7 @@
 #include "Display.h"
 #include <Wire.h>
 #include "conn-mqtt.h"
+#include "conn-sondeseeker.h"
 
 RXTask rxtask = { -1, -1, -1, 0xFFFF, 0 };
 
@@ -343,6 +344,10 @@ void Sonde::defaultConfig() {
 	strcpy(config.mqtt.password, "/0");
 	strcpy(config.mqtt.prefix, "rdz_sonde_server/");
 	config.mqtt.report_interval = 60000;
+
+	config.ss.active = 1;
+ 	config.ss.port = 62655;
+ 	strcpy(config.ss.host, "239.255.0.1");
 }
 
 extern struct st_configitems config_list[];
@@ -538,12 +543,6 @@ void Sonde::setup() {
 	int afcbw = (int)sx1278.getAFCBandwidth();
 	int rxbw = (int)sx1278.getRxBandwidth();
 	LOG_I(TAG, "Sonde::setup() done: Type %s Freq %f, AFC BW: %d, RX BW: %d\n", sondeTypeStr[sondeList[rxtask.currentSonde].type], 0.000001*freq, afcbw, rxbw);
-#if FEATURE_MQTT
-    connMQTT.publishQRG(
-		rxtask.currentSonde+1,
-		sondeTypeStr[sondeList[rxtask.currentSonde].type],
-		sondeList[rxtask.currentSonde].launchsite, freq/1e6);
-#endif
 
 	// reset rxtimer / norxtimer state
 	sonde.sondeList[sonde.currentSonde].lastState = -1;
@@ -601,8 +600,10 @@ void Sonde::receive() {
 	int event = getKeyPressEvent();
 	if (!event) event = timeoutEvent(si);
 	else sonde.dispsavectlON();
-	int action = (event==EVT_NONE) ? ACT_NONE : disp.layout->actions[event];
-	//if(action!=ACT_NONE) { LOG_I(TAG, "event %x: action is %x\n", event, action); }
+	int action = (event==EVT_NONE) ? ACT_NONE : 
+                     (event==EVT_RINEX) ? ACT_RINEX_UPDATE : 
+		     (event==EVT_FORMAT) ? ACT_FORMAT_SD : disp.layout->actions[event];
+	if(action!=ACT_NONE) { LOG_I(TAG, "event %x: action is %x\n", event, action); }
 	// If action is to move to a different sonde index, we do update things here, set activate
 	// to force the sx1278 task to call sonde.setup(), and pass information about sonde to
 	// main loop (display update...)
@@ -759,6 +760,12 @@ uint8_t Sonde::updateState(uint8_t event) {
 		LOG_I(TAG, "previous not supported, advancing to next sonde\n");
 		sonde.nextConfig();
 		return ACT_NEXTSONDE;
+	}
+        if (event==ACT_RINEX_UPDATE) {
+                return ACT_RINEX_UPDATE;
+        }
+	if (event==ACT_FORMAT_SD) {
+		return ACT_FORMAT_SD;
 	}
 	if(event&0x80) {
 		sonde.currentSonde = (event&0x7F);

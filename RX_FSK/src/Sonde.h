@@ -47,6 +47,7 @@ enum RxResult { RX_OK, RX_TIMEOUT, RX_ERROR, RX_UNKNOWN, RX_NOPOS };
 enum Events { EVT_NONE, EVT_KEY1SHORT, EVT_KEY1DOUBLE, EVT_KEY1MID, EVT_KEY1LONG,
                         EVT_KEY2SHORT, EVT_KEY2DOUBLE, EVT_KEY2MID, EVT_KEY2LONG,
                         EVT_VIEWTO, EVT_RXTO, EVT_NORXTO,
+			EVT_RINEX, EVT_FORMAT,
               EVT_MAX };
 extern const char *evstring[];
 extern const char *RXstr[];
@@ -65,6 +66,10 @@ extern const char *RXstr[];
 #define ACT_PREVSONDE 66
 #define ACT_ADDFREQ(n) ((n)+64)
 #define ACT_SONDE(n) ((n)+128)
+#define ACT_RINEX_UPDATE 60
+#define ACT_FORMAT_SD 59
+
+#define ACT_IS_FREQ_CHANGE(n) (((n)>=65)&&((n)<255))
 
 // 0000nnnn => goto display nnnn
 // 01000000 => goto sonde -1
@@ -229,6 +234,12 @@ struct st_cm {
 	int port;
 };
 
+struct st_ss {
+ 	int active;
+ 	char host[64];
+ 	int port;
+ };
+ 
 struct st_sondehub {
 	int active;
 	int chase;
@@ -321,6 +332,7 @@ typedef struct st_rdzconfig {
 	struct st_sondehub sondehub;
 	struct st_cm cm;
 	struct st_sdcard sd;
+	struct st_ss ss;
 } RDZConfig;
 
 
