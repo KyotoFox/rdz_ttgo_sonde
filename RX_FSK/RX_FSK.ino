@@ -381,9 +381,9 @@ void HTMLSAVEBUTTON(char *ptr) {
 const char *handleLoginPost(AsyncWebServerRequest * request) {
   LOG_D(TAG, "Handling login POST request");
 
-  AsyncWebParameter *userp = request->getParam("user", true, false);
-  AsyncWebParameter *authp = request->getParam("auth", true, false);
-  AsyncWebParameter *preauthp= request->getParam("preauth", true, false);
+  const AsyncWebParameter *userp = request->getParam("user", true, false);
+  const AsyncWebParameter *authp = request->getParam("auth", true, false);
+  const AsyncWebParameter *preauthp= request->getParam("preauth", true, false);
   if (!userp || !authp || !preauthp) {
     request->send(400, "text/plain", "Invalid Request");
     return nullptr;
@@ -466,14 +466,14 @@ const char *handleQRGPost(AsyncWebServerRequest * request) {
 #endif
   for (int i = 1; i <= sonde.config.maxsonde; i++) {
     snprintf(label, 10, "A%d", i);
-    AsyncWebParameter *active = request->getParam(label, true);
+    const AsyncWebParameter *active = request->getParam(label, true);
     snprintf(label, 10, "F%d", i);
-    AsyncWebParameter *freq = request->getParam(label, true);
+    const AsyncWebParameter *freq = request->getParam(label, true);
     snprintf(label, 10, "S%d", i);
-    AsyncWebParameter *launchsite = request->getParam(label, true);
+    const AsyncWebParameter *launchsite = request->getParam(label, true);
     if (!freq) continue;
     snprintf(label, 10, "T%d", i);
-    AsyncWebParameter *type = request->getParam(label, true);
+    const AsyncWebParameter *type = request->getParam(label, true);
     if (!type) continue;
     String fstring = freq->value();
     String tstring = type->value();
@@ -609,10 +609,10 @@ const char *handleWIFIPost(AsyncWebServerRequest * request) {
 #endif
   for (int i = 1; i <= MAX_WIFI; i++) {
     snprintf(label, 10, "S%d", i);
-    AsyncWebParameter *ssid = request->getParam(label, true);
+    const AsyncWebParameter *ssid = request->getParam(label, true);
     if (!ssid) continue;
     snprintf(label, 10, "P%d", i);
-    AsyncWebParameter *pw = request->getParam(label, true);
+    const AsyncWebParameter *pw = request->getParam(label, true);
     if (!pw) continue;
     String sstring = ssid->value();
     String pstring = pw->value();
@@ -937,12 +937,12 @@ const char *handleConfigPost(AsyncWebServerRequest * request) {
     String strlabel = request->getParam(i)->name();
     const char *label = strlabel.c_str();
     if (label[strlen(label) - 1] == '#') continue;
-    AsyncWebParameter *value = request->getParam(label, true);
+    const AsyncWebParameter *value = request->getParam(label, true);
     if (!value) continue;
     String strvalue = value->value();
     if ( strcmp(label, "button_pin") == 0 ||
          strcmp(label, "button2_pin") == 0) {
-      AsyncWebParameter *touch = request->getParam(strlabel + "#", true);
+      const AsyncWebParameter *touch = request->getParam(strlabel + "#", true);
       if (touch) {
         int i = atoi(strvalue.c_str());
         if (i != -1 && i != 255) i += 128;
@@ -1171,7 +1171,7 @@ const char *handleEditPost(AsyncWebServerRequest * request) {
   int params = request->params();
   LOG_D(TAG, "Post:, %d params\n", params);
   for (int i = 0; i < params; i++) {
-    AsyncWebParameter* p = request->getParam(i);
+    const AsyncWebParameter* p = request->getParam(i);
     String name = p->name();
     String value = p->value();
     if (name.c_str() == NULL) {
@@ -1189,7 +1189,7 @@ const char *handleEditPost(AsyncWebServerRequest * request) {
     }
   }
 
-  AsyncWebParameter *filep = request->getParam("file");
+  const AsyncWebParameter *filep = request->getParam("file");
   if (!filep) return NULL;
 
   String filename = filep->value();
@@ -1200,7 +1200,7 @@ const char *handleEditPost(AsyncWebServerRequest * request) {
   }
 
   LOG_D(TAG, "Writing file <%s>\n", fn);
-  AsyncWebParameter *textp = request->getParam("text", true);
+  const AsyncWebParameter *textp = request->getParam("text", true);
   if (!textp) return NULL;
   LOG_D(TAG, "Parameter size is %d\n", textp->size());
   LOG_D(TAG, "Multipart: %d  contentlen=%d  \n",
@@ -1544,7 +1544,7 @@ void SetupAsyncServer() {
     // Open file
     // store file object in request->_tempObject
     //request->send(200, "text/html", createEditForm(request->getParam(0)->value()));
-    AsyncWebParameter *param = request->getParam(0);
+    const AsyncWebParameter *param = request->getParam(0);
     if(!param) {
       request->send(404);
       return;
@@ -1563,7 +1563,7 @@ void SetupAsyncServer() {
     if (ret == NULL)
       request->send(200, "text/html", "<html><head>ERROR</head><body><p>Something went wrong (probably ESP32 out of memory). Uploaded file is empty.</p></body></hhtml>");
     else {
-      AsyncWebParameter *param = request->getParam(0);
+      const AsyncWebParameter *param = request->getParam(0);
       if(!param) {
          request->send(404);
          return;
