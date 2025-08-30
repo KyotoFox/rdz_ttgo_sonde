@@ -301,7 +301,8 @@ const String sondeTypeSelect(int activeType) {
 //trying to work around
 //"assertion "heap != NULL && "free() target pointer is outside heap areas"" failed:"
 // which happens if request->send is called in createQRGForm!?!??
-char message[10240 * 3 - 2048]; //needs to be large enough for all forms (not checked in code)
+//char message[10240 * 3 - 2048]; //needs to be large enough for all forms (not checked in code)
+char message[10240 * 1 - 2048];
 // QRG form is currently about 24kb with 100 entries
 
 ///////////////////////// Functions for Reading / Writing QRG list from/to qrg.txt
@@ -711,6 +712,9 @@ const char *createLiveJson() {
   }
 
   strcat(ptr, "}");
+
+  bleInstance.updateSonde(s); // TODO: Testing BLE update without active sondes
+  
   return message;
 }
 ///////////////////// Config form
@@ -2440,6 +2444,9 @@ void loopDecoder() {
     }
 #if FEATURE_SONDEHUB
     connSondehub.updateSonde( s );   // invoke sh_send_data....
+#endif
+#if FEATURE_BLE
+    bleInstance.updateSonde( s );
 #endif
 
 #if FEATURE_MQTT
