@@ -31,7 +31,7 @@ void BLE::init(void) {
 
     NimBLEService* pService = pServer->createService(RDZ_BLE_SERVICE_UUID);
         
-    statusChar = pService->createCharacteristic("226c9470-dafe-40df-a51e-000000000001", NIMBLE_PROPERTY::READ, 1024);
+    statusChar = pService->createCharacteristic("226c9470-dafe-40df-a51e-000000000001", NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY, 1024);
     statusChar->setValue("");
 
     NimBLEDescriptor* statusDesc = statusChar->createDescriptor("2901", NIMBLE_PROPERTY::READ, 20);
@@ -66,6 +66,7 @@ void BLE::updateSonde(SondeInfo *si) {
     LOG_D(TAG, "Char: %s\n", buf);
 
     statusChar->setValue((const char*)buf);
+    statusChar->notify();
 }
 
 
