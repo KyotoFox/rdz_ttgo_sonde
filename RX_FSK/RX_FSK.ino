@@ -713,7 +713,7 @@ const char *createLiveJson() {
 
   strcat(ptr, "}");
 
-  bleInstance.updateSonde(s); // TODO: Testing BLE update without active sondes
+  connBLE.updateSonde(s); // TODO: Testing BLE update without active sondes
 
   return message;
 }
@@ -2268,9 +2268,7 @@ void setup()
   connSDCard.init();
 #endif
 #if FEATURE_BLE
-    Serial.println("Starting BLE");
-    bleInstance.init();
-    Serial.println("BLE Started!");
+    connBLE.init();
 #endif
 
   enableLocalUpdates();   // check if local updates from other servers is allowed
@@ -2446,7 +2444,7 @@ void loopDecoder() {
     connSondehub.updateSonde( s );   // invoke sh_send_data....
 #endif
 #if FEATURE_BLE
-    bleInstance.updateSonde( s );
+    connBLE.updateSonde( s );
 #endif
 
 #if FEATURE_MQTT
@@ -3333,7 +3331,7 @@ void loop() {
 
   Log.handleImprov();
 
-  bleInstance.loop();
+  connBLE.loop();
 
 #ifndef REMOVE_ALL_FOR_TESTING
   switch (mainState) {

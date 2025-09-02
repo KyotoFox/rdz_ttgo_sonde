@@ -12,6 +12,6 @@ public:
     void updateSonde( SondeInfo *si );
 };
 
-extern BLE bleInstance;
+extern BLE connBLE;
 
 #endif
