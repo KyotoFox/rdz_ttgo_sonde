@@ -176,7 +176,7 @@ function checkForDuplicates() {
 }
 
 function mkcfg(id, key, label, value) {
- var s = "<tr style=\"visibility: collapse;\" class=\"cfgpanel\"><td>" + label + "</td><td><input name=\"" + key + "\" type=\"text\" value=\"" + value + "\"/></td></tr>\n";
+ var s = "<tr style=\"display:none;\" class=\"cfgpanel\"><td>" + label + "</td><td><input name=\"" + key + "\" type=\"text\" value=\"" + value + "\"/></td></tr>\n";
  return s;
 }
 function mkcfgbtn(id, key, label, value) {
@@ -186,7 +186,7 @@ function mkcfgbtn(id, key, label, value) {
     touch = " checked";
     v = v & 127;
   }
-  var s = "<tr style=\"visibility:collapse\" class=\"cfgpanel\"><td>" + label + "</td><td><input name=\"" + key + "\" type=\"text\" size=\"3\" value=\"" + v + "\"/>";
+  var s = "<tr style=\"display:none\" class=\"cfgpanel\"><td>" + label + "</td><td><input name=\"" + key + "\" type=\"text\" size=\"3\" value=\"" + v + "\"/>";
   s += "<input type=\"checkbox\" name=\"" + key + "#\" "+touch+"> Touch</td></tr>\n";
   return s;
 }
@@ -214,7 +214,7 @@ function configTable() {
 	  tab += mkcfgbtn("s"+id, key, lbl, cf.get(key));
 	} else if (key=="display") {
           tab += mkcfg("s"+id, key, lbl, cf.get(key));
-	  tab += "<tr style=\"visibility:collapse\" class=\"cfgpanel\"><td>"+scr+"</td><td></td></tr>"
+	  tab += "<tr style=\"display:none\" class=\"cfgpanel\"><td>"+scr+"</td><td></td></tr>"
 	} else {
           tab += mkcfg("s"+id, key, lbl, cf.get(key));
 	}
@@ -240,11 +240,10 @@ function configTable() {
       while( panel = panel.nextElementSibling) {
         console.log(panel);
 	if ( panel.className!="cfgpanel") { break; }
-        if(panel.style.visibility==="collapse") {
-          panel.style.visibility="visible";
+        if(panel.style.display==="none") {
+          panel.style.display="table-row";
         } else {
-          console.log("none");
-          panel.style.visibility="collapse";
+          panel.style.display="none";
         } 
       }
     });
