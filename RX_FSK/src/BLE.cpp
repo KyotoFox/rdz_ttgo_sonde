@@ -33,8 +33,10 @@ void BLE::init(void) {
     //NimBLEDevice::setSecurityPasskey(123456);
     //NimBLEDevice::setSecurityIOCap(BLE_HS_IO_DISPLAY_ONLY); /** Display only passkey */
     
-    NimBLEServer*         pServer                  = NimBLEDevice::createServer();
-    NimBLEService*        pService                 = pServer->createService("ABCD");
+    NimBLEServer* pServer = NimBLEDevice::createServer();
+    pServer->advertiseOnDisconnect(true);
+
+    NimBLEService* pService = pServer->createService("ABCD");
     // NimBLECharacteristic* pSecureCharacteristic =
     //     pService->createCharacteristic("1235",
     //                                    NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::READ_ENC | NIMBLE_PROPERTY::READ_AUTHEN);
@@ -56,6 +58,10 @@ void BLE::init(void) {
     pAdvertising->start();
 
     Serial.printf("Advertising Started\n");
+}
+
+void BLE::loop() {
+
 }
 
 

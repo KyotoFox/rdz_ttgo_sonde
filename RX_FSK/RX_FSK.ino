@@ -714,7 +714,7 @@ const char *createLiveJson() {
   strcat(ptr, "}");
 
   bleInstance.updateSonde(s); // TODO: Testing BLE update without active sondes
-  
+
   return message;
 }
 ///////////////////// Config form
@@ -3332,6 +3332,8 @@ void loop() {
                 mainState, currentDisplay, lastDisplay, ESP.getFreeHeap(), uxTaskGetStackHighWaterMark(0), strlen(message));
 
   Log.handleImprov();
+
+  bleInstance.loop();
 
 #ifndef REMOVE_ALL_FOR_TESTING
   switch (mainState) {
