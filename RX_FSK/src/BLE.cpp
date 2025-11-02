@@ -6,6 +6,7 @@
 #include <Arduino.h>
 #include "BLE.h"
 #include "json.h"
+#include "Sonde.h"
 
 #define TAG "BLE"
 #include "logger.h"
@@ -23,7 +24,7 @@ void BLE::init(void) {
 
     LOG_I(TAG, "Initializing\n");
 
-    NimBLEDevice::init("rdzTTGOsonde");
+    NimBLEDevice::init(sonde.config.mdnsname);
     NimBLEDevice::setPower(3); /** +3db */
 
     NimBLEServer* pServer = NimBLEDevice::createServer();
