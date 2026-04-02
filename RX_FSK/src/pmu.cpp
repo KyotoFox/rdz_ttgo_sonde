@@ -81,6 +81,10 @@ uint8_t pmu_irq = 0;
 extern SemaphoreHandle_t axpSemaphore;
 
 /////////////////////////////////////////////////////////////////////////////////////
+///
+
+PMU::~PMU() = default;
+
 /// High-level functions 
 PMU *PMU::getInstance(TwoWire &wire) {
     PMU *pmu = NULL;
@@ -488,6 +492,11 @@ int AXP2101PMU::init() {
     val &= 0xFC;
     writeRegister(AXP2101_CHG_V_CFG, val | AXP2101_CHG_VOL_4V2);
 #endif
+    // enable blue LED
+#if 0
+    val = readRegister(0x69);
+    writeRegister(0x69, (val & 0xF9) | 0x02);
+#endif
 
     // Disable TS measurement, enable vsys, vbus, vbat measurement
     // Disable TS is important for T-Beam 1.2 (no TS thermistor), otherwise it will not charge.
@@ -576,4 +585,9 @@ float AXP2101PMU::getVbusVoltage() {
 float AXP2101PMU::getVbusCurrent() { return -1; }
 float AXP2101PMU::getTemperature() { return -1; }
 
-
+/* Simple function to get battery voltage on systems that do not have a PMU */
+float getBattNoPMU() {
+    if(sonde.config.batt_adc<0) return -999;
+    float batt = (float)(analogRead(sonde.config.batt_adc)) / 4095 * 2 * 3.3 * 1.1;
+    return batt;
+}

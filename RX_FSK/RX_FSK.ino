@@ -67,6 +67,8 @@
 
 #include "src/conn-system.h"
 
+extern SemaphoreHandle_t globalLock;
+
 Conn *connectors[] = { &connSystem,
 &connGPS,
 #if FEATURE_APRS
@@ -102,7 +104,7 @@ PMU *pmu = NULL;
 SemaphoreHandle_t axpSemaphore;
 extern uint8_t pmu_irq;
 
-const char *updateHost = "rdzsonde.mooo.com";
+const char *updateHost = "rdzsonde.org";
 int updatePort = 80;
 
 const char *updatePrefixM = "/main/";
@@ -228,7 +230,7 @@ String processor(const String& var) {
 #endif
     if ( posInfo.valid ) {
       char p[40];
-      snprintf(p, 40, "%g,%g", posInfo.lat, posInfo.lon);
+      snprintf(p, 40, "%.8g,%.8g", posInfo.lat, posInfo.lon);
       return String(p);
     } else {
       return String("48,13");
@@ -457,7 +459,7 @@ const char *handleQRGPost(AsyncWebServerRequest * request) {
     LOG_E(TAG, "Error while opening '/qrg.txt' for writing");
     return "Error while opening '/qrg.txt' for writing";
   }
-  Serial.println("Handling post request");
+  LOG_D(TAG, "Handling post request");
 #if 0
   int params = request->params();
   for (int i = 0; i < params; i++) {
@@ -544,7 +546,6 @@ void setupWifiList() {
   }
   nNetworks = i;
   LOG_I(TAG, "%d networks in networks.txt\n", i);
-  // Serial.print(i); Serial.println(" networks in networks.txt\n");
   for (int j = 0; j < i; j++) {
     LOG_I(TAG, "%s: %s\n", networks[j].id, networks[j].pw);
   }
@@ -707,7 +708,7 @@ const char *createLiveJson() {
   strcat(ptr, " }");
 
   if (posInfo.valid) {
-    sprintf(ptr + strlen(ptr), ", \"gps\": {\"lat\": %g, \"lon\": %g, \"alt\": %d, \"sat\": %d, \"speed\": %g, \"dir\": %d, \"hdop\": %d }", posInfo.lat, posInfo.lon, posInfo.alt, posInfo.sat, posInfo.speed, posInfo.course, posInfo.hdop);
+    sprintf(ptr + strlen(ptr), ", \"gps\": {\"lat\": %.8g, \"lon\": %.8g, \"alt\": %d, \"sat\": %d, \"speed\": %g, \"dir\": %d, \"hdop\": %d }", posInfo.lat, posInfo.lon, posInfo.alt, posInfo.sat, posInfo.speed, posInfo.course, posInfo.hdop);
     //}
   }
 
@@ -818,6 +819,7 @@ struct st_configitems config_list[] = {
   {"sd.clk", 0, &sonde.config.sd.clk},
   {"sd.sync", 0, &sonde.config.sd.sync},
   {"sd.name", 0, &sonde.config.sd.name},
+  {"sd.speed", 0, &sonde.config.sd.speed},
 #endif
   /* Hardware dependeing settings */
   {"disptype", 0, &sonde.config.disptype},
@@ -903,7 +905,7 @@ const char *createConfigForm() {
         break;
       case -7: // double
         if (!isnan(*(double *)config_list[i].data))
-          sprintf(ptr + strlen(ptr), "%g", *(double *)config_list[i].data);
+          sprintf(ptr + strlen(ptr), "%.8g", *(double *)config_list[i].data);
         break;
       default: // string
         strcat(ptr, (char *)config_list[i].data);
@@ -1021,49 +1023,38 @@ const char *handleControlPost(AsyncWebServerRequest * request) {
   int params = request->params();
   for (int i = 0; i < params; i++) {
     String param = request->getParam(i)->name();
-    Serial.println(param.c_str());
+    LOG_D(TAG, "Contral post: %s\n", param.c_str());
     if (param.equals("rx")) {
-      Serial.println("equals rx");
       button1.pressed = KP_SHORT;
     }
     else if (param.equals("scan")) {
-      Serial.println("equals scan");
       button1.pressed = KP_DOUBLE;
     }
     else if (param.equals("spec")) {
-      Serial.println("equals spec");
       button1.pressed = KP_MID;
     }
     else if (param.equals("wifi")) {
-      Serial.println("equals wifi");
       button1.pressed = KP_LONG;
     }
     else if (param.equals("rx2")) {
-      Serial.println("equals rx2");
       button2.pressed = KP_SHORT;
     }
     else if (param.equals("scan2")) {
-      Serial.println("equals scan2");
       button2.pressed = KP_DOUBLE;
     }
     else if (param.equals("spec2")) {
-      Serial.println("equals spec2");
       button2.pressed = KP_MID;
     }
     else if (param.equals("wifi2")) {
-      Serial.println("equals wifi2");
       button2.pressed = KP_LONG;
     }
     else if (param.equals("rinex")) {
-      Serial.println("equals rinex");
       button2.pressed = KP_RINEX;
     }
     else if (param.equals("format")) {
-      Serial.println("equals format");
       button2.pressed = KP_FORMAT;
     }
     else if (param.equals("reboot")) {
-      Serial.println("equals reboot");
       ESP.restart();
     }
   }
@@ -1238,8 +1229,8 @@ const char *createUpdateForm(boolean run) {
     strcat(ptr, "<p>Doing update, wait until reboot</p>");
   } else {
     sprintf(ptr + strlen(ptr), "<p>Currently installed: %s-%c%d</p>\n", version_id, FS_MAJOR + 'A' - 1, FS_MINOR);
-    strcat(ptr, "<p>Available main: <iframe src=\"http://rdzsonde.mooo.com/main/update-info.html\" style=\"height:40px;width:400px\"></iframe><br>"
-           "Available devel: <iframe src=\"http://rdzsonde.mooo.com/dev2/update-info.html\" style=\"height:40px;width:400px\"></iframe></p>");
+    strcat(ptr, "<p>Available main: <iframe src=\"http://rdzsonde.org/main/update-info.html\" style=\"height:40px;width:400px\"></iframe><br>"
+           "Available devel: <iframe src=\"http://rdzsonde.org/dev2/update-info.html\" style=\"height:40px;width:400px\"></iframe></p>");
     strcat(ptr, "<input type=\"submit\" name=\"main\" value=\"Main-Update\"></input><br><input type=\"submit\" name=\"dev\" value=\"Devel-Update\">");
     strcat(ptr, "<br><p>Note: If suffix is the same, update should work fully. If the number is different, update contains changes in the file system. A full re-flash is required to get all new features, but the update should not break anything. If the letter is different, a full re-flash is mandatory, update will not work</p>");
   }
@@ -1391,6 +1382,29 @@ bool isAuthenticated(AsyncWebServerRequest *request, int level) {
 
 const char* PARAM_MESSAGE = "message";
 
+#if FEATURE_SDCARD
+static bool deleteSdDirRecursive(const char *sdPath, const char *vfsPath) {
+  char entryPath[360];
+  char vfsFull[360];
+  DIR *d = opendir(vfsPath);
+  if(!d) return false;
+  struct dirent *e;
+  struct stat st;
+  while((e = readdir(d)) != NULL) {
+    if(strcmp(e->d_name, ".") == 0 || strcmp(e->d_name, "..") == 0) continue;
+    snprintf(entryPath, sizeof(entryPath), "%s/%s", sdPath, e->d_name);
+    snprintf(vfsFull, sizeof(vfsFull), "%s/%s", vfsPath, e->d_name);
+    if(stat(vfsFull, &st) == 0 && (st.st_mode & S_IFDIR)) {
+      if(!deleteSdDirRecursive(entryPath, vfsFull)) { closedir(d); return false; }
+    } else {
+      SD.remove(entryPath);
+    }
+  }
+  closedir(d);
+  return SD.rmdir(sdPath);
+}
+#endif
+
 void SetupAsyncServer() {
   Serial.println("SetupAsyncServer()\n");
   for(int i=0; i<7; i++) { bootid[i]=random(26)+'A'; }
@@ -1495,50 +1509,138 @@ void SetupAsyncServer() {
     request->send(200);
   }, handleUpload);
 #if FEATURE_SDCARD
-  server.on("/sd/data.csv", HTTP_GET, [](AsyncWebServerRequest *request) {
-     Serial.println("Opening SD card file\n");
-     const File SDFile = SD.open("/data.csv", FILE_READ);
-     if(SDFile) { LOG_I(TAG, "SD file opened\n"); }
-     else { LOG_I(TAG, "SD file does not exist"); request->send(404); return; }
-     AsyncWebServerResponse *response = request->beginChunkedResponse("text/plain", [SDFile](uint8_t *buf, size_t maxLen, size_t index) -> size_t {
-       File sdlf = SDFile;
-       // if(maxLen>1024) maxLen=1024;
-       LOG_D(TAG, "[HTTP]\t[%d]\tINDEX [%d]\tBUFFER_MAX_LENGHT [%d]\r\n", index, sdlf.size(), maxLen);
-       return sdlf.read(buf, maxLen);
-     });
-     request->send(response);
-  });
   server.serveStatic("/sd/", SD, "/");
-  server.on("/sd/files.json", HTTP_GET, [](AsyncWebServerRequest *request) {
-    DIR *dir = opendir("/sd/");
-    struct dirent *dent;
-    AsyncWebServerResponse *response = request->beginChunkedResponse("application/json", [dir, dent](uint8_t *buf, size_t maxLen, size_t index) mutable -> size_t {
-      LOG_D(TAG, "[HTTP]\tINDEX [%d]\tBUFFER_MAX_LENGHT [%d]\r\n", index, maxLen);
-      if(index==0) {
-        if(!dir) {
-		dent = NULL;
-	}else {
-         	dent = readdir(dir);
-	}
-        strcpy((char *)buf, "[ \n");
-        if(dent==NULL) { strcpy( (char*)buf+2, "]"); return 3; }
-        return 3;
+  //server.on("/sd/files.json", HTTP_GET, [](AsyncWebServerRequest *request) {  } ); /// TODO: fix later, temporarily keep for bkward compat
+
+  server.on("/files.json", HTTP_GET, [](AsyncWebServerRequest *request) {
+#define FILES_JSON_MAX_SIZE 4096
+#define FILES_JSON_MAX_ENTRY 128
+    String subdir;
+    if(request->hasParam("dir")) {
+      String dirParam = request->getParam("dir")->value();
+      if(dirParam.indexOf("..") >= 0 || dirParam.length() > 32) { request->send(400, "application/json", "[]"); return; }
+      if(dirParam == ".int") {
+        subdir = "/littlefs/";  /* magic: list LittleFS root */
+      } else {
+        subdir = "/sd/" + dirParam + "/";
       }
-      if(dent) {
-        char fname[128];
-        struct stat attr;
-        char ftim[50];
-        snprintf(fname, 128, "/sd/%s", dent->d_name);
-        stat(fname, &attr);
-        strftime(ftim, 50, "%Y-%m-%dT%H:%M:%SZ", gmtime(&attr.st_mtime)); 
-        snprintf((char *)buf, maxLen, "{\"name\":\"%s\", \"size\":%d, \"ts\":\"%s\"}", dent->d_name, attr.st_size, ftim);
-        dent = readdir(dir);
-        if(dent) strcat((char *)buf, ",\n");
-        else strcat((char *)buf, "\n]\n");
-        return strlen((char *)buf);
-      } else { return 0; }
-    });
-    request->send(response);
+    } else {
+      subdir = "/sd/";
+    }
+    int start = 0;
+    if(request->hasParam("start")) {
+      start = request->getParam("start")->value().toInt();
+      if(start < 0) start = 0;
+    }
+    int len = 0;
+    DIR *dir = NULL;
+    const size_t bodyCap = FILES_JSON_MAX_SIZE - 2;
+    xSemaphoreTake(globalLock, portMAX_DELAY);
+    dir = opendir(subdir.c_str());
+    xSemaphoreGive(globalLock);
+    if(!dir) {
+      request->send(500, "application/json", "[]");
+      return;
+    }
+    len = snprintf(message, FILES_JSON_MAX_SIZE, "[");
+    if(len < 0 || (size_t)len >= bodyCap) { xSemaphoreTake(globalLock, portMAX_DELAY); closedir(dir); xSemaphoreGive(globalLock); request->send(500, "application/json", "[]"); return; }
+    int index = 0;
+    for(;;) {
+      char d_name_copy[64];
+      int is_dir = 0;
+      time_t mtime = 0;
+      long fsize = 0;
+      int got = 0;
+      xSemaphoreTake(globalLock, portMAX_DELAY);
+      struct dirent *dent = readdir(dir);
+      if(!dent) {
+        closedir(dir);
+        xSemaphoreGive(globalLock);
+        break;
+      }
+      if(strcmp(dent->d_name, ".") == 0 || strcmp(dent->d_name, "..") == 0) {
+        xSemaphoreGive(globalLock);
+        continue;
+      }
+      strncpy(d_name_copy, dent->d_name, sizeof(d_name_copy) - 1);
+      d_name_copy[sizeof(d_name_copy) - 1] = '\0';
+      if(index < start) {
+        index++;
+        xSemaphoreGive(globalLock);
+        continue;
+      }
+      char fname[128];
+      struct stat attr;
+      snprintf(fname, sizeof(fname), "%s%s", subdir.c_str(), dent->d_name);
+      if(stat(fname, &attr) == 0) {
+        is_dir = S_ISDIR(attr.st_mode) ? 1 : 0;
+        mtime = attr.st_mtime;
+        fsize = (long)attr.st_size;
+        got = 1;
+      }
+      xSemaphoreGive(globalLock);
+      if(!got) continue;
+      if((size_t)(len + FILES_JSON_MAX_ENTRY) >= bodyCap) {
+        xSemaphoreTake(globalLock, portMAX_DELAY);
+        closedir(dir);
+        xSemaphoreGive(globalLock);
+        break;
+      }
+      char ftim[50];
+      strftime(ftim, sizeof(ftim), "%Y-%m-%dT%H:%M:%SZ", gmtime(&mtime));
+      int n;
+      if(is_dir)
+        n = snprintf(message + len, (size_t)(FILES_JSON_MAX_SIZE - len), "%s{\"name\":\"%s\",\"dir\":1,\"ts\":\"%s\"}", len > 1 ? "," : "", d_name_copy, ftim);
+      else
+        n = snprintf(message + len, (size_t)(FILES_JSON_MAX_SIZE - len), "%s{\"name\":\"%s\",\"size\":%ld,\"ts\":\"%s\"}", len > 1 ? "," : "", d_name_copy, fsize, ftim);
+      if(n < 0 || (size_t)(len + n) >= bodyCap) {
+        xSemaphoreTake(globalLock, portMAX_DELAY);
+        closedir(dir);
+        xSemaphoreGive(globalLock);
+        break;
+      }
+      len += n;
+      index++;
+    }
+    len += snprintf(message + len, (size_t)(FILES_JSON_MAX_SIZE - len), "]");
+    if(len < 0 || (size_t)len >= FILES_JSON_MAX_SIZE) { request->send(500, "application/json", "[]"); return; }
+    message[len] = '\0';
+    request->send(200, "application/json", message);
+#undef FILES_JSON_MAX_ENTRY
+#undef FILES_JSON_MAX_SIZE
+  });
+  server.on("/sdrm.html", HTTP_GET, [](AsyncWebServerRequest *request) {
+    if(!isAuthenticated(request, 2)) return;
+    const AsyncWebParameter *param = request->getParam(0);
+    if(!param) { request->send(404); return; }
+    String path = param->value();
+    if(path.indexOf("..") >= 0 || path.length() > 80) { request->send(400, "text/html", "<html><body>invalid path</body></html>"); return; }
+    char filename[96];
+    snprintf(filename, sizeof(filename), "/%s", path.c_str());
+    File f = SD.open(filename);
+    if(!f) {
+      request->send(404, "text/html", "<html><body>not found</body></html>");
+      return;
+    }
+    bool isDir = f.isDirectory();
+    f.close();
+    if(isDir) {
+      char vfsPath[96];
+      snprintf(vfsPath, sizeof(vfsPath), "/sd/%s", path.c_str());
+      if(deleteSdDirRecursive(filename, vfsPath)) {
+        request->send(200, "text/html", "<html><body>ok</body></html>");
+      } else {
+        request->send(500, "text/html", "<html><body>failed to delete folder</body></html>");
+      }
+    } else {
+      if(SD.remove(filename)) {
+        request->send(200, "text/html", "<html><body>ok</body></html>");
+      } else {
+        char info[256];
+        snprintf(info, sizeof(info), "<html><body>failed to delete '%s'\n</body></html>", filename);
+        request->send(404, "text/html", info);
+      }
+    }
   });
 #endif
 
@@ -2033,8 +2135,6 @@ int scanI2Cdevice(void)
 
 extern int initlevels[40];
 
-extern SemaphoreHandle_t globalLock;
-
 #ifdef ESP_MEM_DEBUG
 typedef void (*esp_alloc_failed_hook_t) (size_t size, uint32_t caps, const char * function_name);
 extern esp_err_t heap_caps_register_failed_alloc_callback(esp_alloc_failed_hook_t callback);
@@ -2100,7 +2200,7 @@ void setup()
   // and NOT TTGO Lora32 v2.1_1.6 (fingerprint 31/63)
   if ( ( (sonde.fingerprint & (64 + 31)) != 31) && ((sonde.fingerprint & 16) == 16) ) {
     // FOr T-Beam 1.0
-    for (int i = 0; i < 10; i++) { // try multiple times
+    for (int i = 0; i < 2; i++) { // try multiple times
       Wire.begin(21, 22);
       // Make sure the whole thing powers up!?!?!?!?!?
       U8X8 *u8x8 = new U8X8_SSD1306_128X64_NONAME_HW_I2C(0, 22, 21);
@@ -2183,8 +2283,13 @@ void setup()
   LOG_D(TAG, "disp.initFromFile... layouts is %p\n", disp.layouts);
 
 
-#if 1
+#if 0
+  if (1) { //testing cyd
+    digitalWrite(sonde.config.sx1278_ss, HIGH);
+    pinMode(sonde.config.sx1278_ss, OUTPUT);
 
+    SPI.begin(18, 19, 23, -1);    // CKL, MISO, MOSI, CS)
+  } else 
   if (sonde.config.type == TYPE_M5_CORE2) {
     // Core2 uses Pin 38 for MISO
     SPI.begin(18, 38, 23, -1);
@@ -2205,11 +2310,13 @@ void setup()
   SPI.setClockDivider(SPI_CLOCK_DIV2);
   //Set data mode
   SPI.setDataMode(SPI_MODE0);
+#endif
+#if 1
 
   sx1278.setup(globalLock);
 
   int i = 0;
-  while (++i < 3) {
+  while (++i < 10) {
     // == check the radio chip by setting default frequency =========== //
     sx1278.ON();
     if (sx1278.setFrequency(402700000) == 0) {
@@ -2218,8 +2325,7 @@ void setup()
       Serial.println(F("Setting freq: ERROR "));
     }
     float f = sx1278.getFrequency();
-    Serial.print("Frequency set to ");
-    Serial.println(f);
+    LOG_D(TAG, "Frequency set to %d", f);
     // == check the radio chip by setting default frequency =========== //
     if( f>402700000-1000 && f<402700000+1000 ) break;
     delay(500);
@@ -2608,7 +2714,7 @@ const char *translateEncryptionType(wifi_auth_mode_t encryptionType) {
 }
 
 // in core.h
-//enum t_wifi_state { WIFI_DISABLED, WIFI_SCAN, WIFI_CONNECT, WIFI_CONNECTED, WIFI_APMODE };
+//enum t_wifi_state { WIFI_DISABLED, WIFI_SCAN, WIFI_CONNECT, WIFI_CONNECT_GOT_DISCONNECT, WIFI_CONNECTED, WIFI_APMODE };
 
 t_wifi_state wifi_state = WIFI_DISABLED;
 
@@ -2676,6 +2782,10 @@ void WiFiEvent(WiFiEvent_t event)
       break;
     case ARDUINO_EVENT_WIFI_STA_CONNECTED:
       Serial.println("Connected to access point");
+      if (wifi_state == WIFI_CONNECT_GOT_DISCONNECT) {
+        /* Connection came back on its own; don't run the disconnect+retry path */
+        wifi_state = WIFI_CONNECT;
+      }
       break;
     case ARDUINO_EVENT_WIFI_STA_DISCONNECTED:
       Serial.println("Disconnected from WiFi access point");
@@ -2687,6 +2797,7 @@ void WiFiEvent(WiFiEvent_t event)
 	// lets try somethign else:
 	/// This is not a good idea, lets check what if we do nothing:   WiFi.reconnect();
 	Serial.println("WiFi State was connect");
+        wifi_state = WIFI_CONNECT_GOT_DISCONNECT;
 	break;
       }
       LOG_D(TAG, "Turning off (state is %d)\n", wifi_state);
@@ -2694,6 +2805,8 @@ void WiFiEvent(WiFiEvent_t event)
       break;
     case ARDUINO_EVENT_WIFI_OFF:
       Serial.println("WiFi is OFF");
+      /* So let's retry? depending on mode... for now testing for mode 4*/
+      if(sonde.config.wifi == 4) { wifiConnectDirect(1); }
       break;
     case ARDUINO_EVENT_WIFI_STA_AUTHMODE_CHANGE:
       Serial.println("Authentication mode of access point has changed");
@@ -2946,6 +3059,7 @@ void loopWifiScan() {
   int lastl = (disph / dispys - 2) * dispys;
   int cnt = 0;
   char abort = 0; // abort on keypress
+  int net_index = -1;
 
   switch(sonde.config.wifi) {
   case 0:  // no WiFi
@@ -2960,10 +3074,8 @@ void loopWifiScan() {
     // Mode STN/DIRECT[4]: Connect directly (supports hidden AP)
     {
       disp.rdis->drawString(0, 0, "WiFi Connect...");
-      const char *ssid = fetchWifiSSID(1);
-      WiFi.mode(WIFI_STA);
-      WiFi.begin( ssid, fetchWifiPw(1) );
-      disp.rdis->drawString(0, dispys * 2, ssid);
+      disp.rdis->drawString(0, dispys * 2, fetchWifiSSID(1));
+      wifiConnectDirect(1);
     }
     break;
   case 1:  // STATION mode (continue in BG if no connection)
@@ -2971,7 +3083,6 @@ void loopWifiScan() {
     // Mode STATION[1] or SETUP[3]: Scan for networks;
     disp.rdis->drawString(0, 0, "WiFi Scan...");
     int line = 0;
-    int index = -1;
     WiFi.mode(WIFI_STA);
     int n = WiFi.scanNetworks();
     for (int i = 0; i < n; i++) {
@@ -2982,26 +3093,41 @@ void loopWifiScan() {
       const char *encryptionTypeDescription = translateEncryptionType(WiFi.encryptionType(i));
       LOG_I(TAG, "Network %s: RSSI %d, MAC %s, enc: %s\n", ssid.c_str(), WiFi.RSSI(i), mac.c_str(), encryptionTypeDescription);
       int curidx = fetchWifiIndex(ssid.c_str());
-      if (curidx >= 0 && index == -1) {
-        index = curidx;
-        LOG_I(TAG, "Match found at scan entry %d, config network %d\n", i, index);
+      if (curidx >= 0 && net_index == -1) {
+        net_index = curidx;
+        LOG_I(TAG, "Match found at scan entry %d, config network %d\n", i, net_index);
       }
     }
-    if (index >= 0) { // some network was found
-      Serial.print("Connecting to: "); Serial.print(fetchWifiSSID(index));
-      Serial.print(" with password "); Serial.println(fetchWifiPw(index));
+    if (net_index >= 0) { // some network was found
+      Serial.print("Connecting to: "); Serial.print(fetchWifiSSID(net_index));
+      Serial.print(" with password "); Serial.println(fetchWifiPw(net_index));
 
       disp.rdis->drawString(0, lastl, "Conn:");
-      disp.rdis->drawString(6 * dispxs, lastl, fetchWifiSSID(index));
+      disp.rdis->drawString(6 * dispxs, lastl, fetchWifiSSID(net_index));
       // TODO: wifi_state is used inconsistently
       wifi_state = WIFI_CONNECT;
-      WiFi.begin(fetchWifiSSID(index), fetchWifiPw(index));
+      WiFi.begin(fetchWifiSSID(net_index), fetchWifiPw(net_index));
     } else {
       abort = 2;  // no network found in scan => abort right away
     }
   }
   while (WiFi.status() != WL_CONNECTED && cnt < MAXWIFIDELAY && !abort)  {
     delay(500);
+    if(wifi_state == WIFI_CONNECT_GOT_DISCONNECT) {
+      if(WiFi.status() == WL_CONNECTED) { /* connection came back, avoid tearing it down */
+        wifi_state = WIFI_CONNECT;
+      } else {
+        int connectIndex = (sonde.config.wifi == 4) ? 1 : net_index;
+        WiFi.disconnect(true);   // Disconnect and wait, allowing full dissassociation, then retry
+        Serial.print("_d_");
+        delay(2000); // 2sec delay
+        handlePMUirq();
+        abort = (getKeyPressEvent() != EVT_NONE);
+        if(abort) break;
+        WiFi.begin(fetchWifiSSID(connectIndex), fetchWifiPw(connectIndex));
+        wifi_state = WIFI_CONNECT;
+      }
+    }
     Serial.print(".");
     disp.rdis->drawString(15 * dispxs, lastl + dispys, _scan[cnt & 1]);
     cnt++;

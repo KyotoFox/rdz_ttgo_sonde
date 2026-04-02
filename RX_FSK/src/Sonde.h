@@ -15,6 +15,7 @@ typedef enum BoardTypes {
    BOARD_TTGOv1_HELTEC,
    BOARD_M5_CORE_GRAY,
    BOARD_M5_CORE2,
+   BOARD_CYD_E32R28T,
    BOARD_UNKNOWN
 } BoardTypes;
 
@@ -260,6 +261,7 @@ struct st_sdcard {
 	int clk;
 	int sync;
 	int name;
+	int speed;	/* SPI speed in Hz (0 = library default), e.g. 4000000, 8000000, 16000000 */
 };
 
 // to be extended
