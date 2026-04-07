@@ -180,6 +180,7 @@ public:
 	static void drawAFC(DispEntry *de);
 	static void drawIP(DispEntry *de);
 	static void drawSite(DispEntry *de);
+	static void drawRSSIBar(DispEntry *de);
 	static void drawTelemetry(DispEntry *de);
 	static void drawKilltimer(DispEntry *de);
 	static void drawGPS(DispEntry *de);

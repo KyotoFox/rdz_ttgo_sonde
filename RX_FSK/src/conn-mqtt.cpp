@@ -248,6 +248,23 @@ void MQTT::publishPeak(double pf, int rssi)
     mqttClient.publish(topic, MQTT_QOS_NONE, MQTT_RETAIN_FALSE, payload);
 }
 
+void MQTT::publishRssiMinMax(float freq, int minRaw, int maxRaw)
+{
+    if(!mqttGate(MQTT_SEND_RFINFO))
+      return;
+
+    timeFormat();
+    char payload[256];
+    snprintf(payload, 256,
+        "{\"time\": \"%s\", \"freq\": %.3f, \"rssi_max\": %.1f, \"rssi_min\": %.1f}",
+        time_str, freq, -minRaw/2.0, -maxRaw/2.0);
+    LOG_D(TAG, "publishRssiMinMax: sending %s\n", payload);
+
+    char topic[128];
+    snprintf(topic, sizeof(topic), "%s%s", sonde.config.mqtt.prefix, "rssimonitor");
+    mqttClient.publish(topic, MQTT_QOS_NONE, MQTT_RETAIN_FALSE, payload);
+}
+
 // What's the scanner looking at?
 void MQTT::updateQRG(int sondeIndex)
 {

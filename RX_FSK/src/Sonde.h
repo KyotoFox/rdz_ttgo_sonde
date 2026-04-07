@@ -174,6 +174,15 @@ typedef struct st_RXTask {
 
 extern RXTask rxtask;
 
+struct RssiMonitor {
+	volatile int16_t liveRssi;
+	int16_t minuteMin;    // lowest raw value seen in window (strongest signal)
+	int16_t minuteMax;    // highest raw value seen in window (weakest signal)
+	uint32_t minuteStart;
+	bool hasData;
+};
+extern RssiMonitor rssiMonitor;
+
 struct st_rs41config {
 	int agcbw;
 	int rxbw;

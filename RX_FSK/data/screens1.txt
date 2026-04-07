@@ -55,7 +55,8 @@
 #     50: circle radius, followed by fg and bg color
 #     5: bullet radius, followed by fg color
 #     4: arrow width, followed by fg color
-# R RSSI
+# R RSSI value (numeric)
+# Rb RSSI bar graph (live signal level, falls back to launch site name when idle)
 # B battery(T-Beam 1.0) S=status V=Batt.Volt C=charge current D=discharge current
 #                       U=USB volt I=USB current  T=IC temp
 #
@@ -115,7 +116,7 @@ timeaction=#,D,+
 0,5=S#:
 0,9=T
 3,0=F MHz
-5,0,16=S
+5,0,16=Rb
 7,0=gV
 7,5=n
 
@@ -281,7 +282,7 @@ timeaction=#,D,+
 0,0=XScan
 0,5=S#:
 0,9=T
-2,0,16=s
+2,0,16=rb
 3,0=F MHz
 6,0=bS
 6,2=bVVb

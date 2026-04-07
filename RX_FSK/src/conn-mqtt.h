@@ -50,6 +50,7 @@ public:
 
         /* Radio debug - spectrum and scanner*/
         void publishPeak(double pf, int rssi);
+        void publishRssiMinMax(float freq, int minRaw, int maxRaw);
         void publishDebug(char* debugmsg);
 
        private:

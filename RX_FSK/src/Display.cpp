@@ -103,7 +103,7 @@ DispEntry searchLayout[] = {
 	{0, 0, FONT_LARGE, -1, 0xFFFF, 0, disp.drawText, "Scan:"},
 	{0, 8, FONT_LARGE, -1, 0xFFFF, 0, disp.drawType, NULL},
 	{3, 0, FONT_LARGE, -1, 0xFFFF, 0, disp.drawFreq, " MHz"},
-	{5, 0, FONT_LARGE, -1, 0xFFFF, 0, disp.drawSite, "l"},
+	{5, 0, FONT_LARGE, -1, 0xFFFF, 0, disp.drawRSSIBar, NULL},
 	{7, 5, 0, -1, 0xFFFF, 0, disp.drawIP, NULL},	
 	{-1, -1, -1, 0, 0, 0, NULL, NULL},
 };
@@ -998,7 +998,12 @@ void Display::parseDispElement(char *text, DispEntry *de)
 			}
 			break;
 		case 'r':
-			de->func = disp.drawRSSI; break;
+			if (text[1] == 'b') {
+				de->func = disp.drawRSSIBar;
+			} else {
+				de->func = disp.drawRSSI;
+			}
+			break;
 		case 'x':
 			de->func = disp.drawText;
 			de->extra = strdup(text+1);
@@ -1433,6 +1438,39 @@ void Display::drawSite(DispEntry *de) {
 	if(de->extra[0]) strcat(buf, de->extra+1);
 	drawString(de, buf);
 }
+void Display::drawRSSIBar(DispEntry *de) {
+	int rssi = rssiMonitor.hasData ? (int)rssiMonitor.liveRssi : -1;
+	// raw register value: 0 = 0 dBm (strongest), 255 = -127.5 dBm (weakest)
+	// map directly to pixel width: 128 pixels on OLED, 16 chars on TFT
+	if (ISOLED(sonde.config)) {
+		int barPixels = 0;
+		if (rssi >= 0) {
+			barPixels = (255 - rssi) * 128 / 255;
+			if (barPixels > 128) barPixels = 128;
+		}
+		for (int t = 0; t < 16; t++) {
+			uint8_t tile[8];
+			int tileStart = t * 8;
+			for (int col = 0; col < 8; col++) {
+				tile[col] = (tileStart + col < barPixels) ? 0xFF : 0x00;
+			}
+			rdis->drawTile(de->x + t, de->y, 1, tile);
+			rdis->drawTile(de->x + t, de->y + 1, 1, tile);
+		}
+	} else {
+		int barlen = 0;
+		if (rssi >= 0) {
+			barlen = (255 - rssi) * 16 / 255;
+			if (barlen > 16) barlen = 16;
+		}
+		rdis->setFont(de->fmt);
+		for (int i = 0; i < 16; i++) {
+			buf[i] = (i < barlen) ? '#' : ' ';
+		}
+		buf[16] = 0;
+		drawString(de, buf);
+	}
+}
 void Display::drawTelemetry(DispEntry *de) {
 	rdis->setFont(de->fmt);
 	float value=0;
@@ -1837,7 +1875,7 @@ void Display::drawGPS(DispEntry *de) {
 	void Display::updateDisplayRSSI() {
 		if( dispstate == 0 ) return; // do not display anything
 		for(DispEntry *di=layout->de; di->func != NULL; di++) {
-			if(di->func != disp.drawRSSI) continue;
+			if(di->func != disp.drawRSSI && di->func != disp.drawRSSIBar) continue;
 			di->func(di);
 		}
 	}

@@ -768,7 +768,25 @@ uint8_t SX1278FSK::receivePacketTimeout(uint32_t wait, byte *data)
 			}
 			previous = millis(); // reset timeout after receiving data
 		} else {
-			delay(10);
+			int rssi = readRegister(REG_RSSI_VALUE_FSK);
+			rssiMonitor.liveRssi = rssi;
+			if (!rssiMonitor.hasData) {
+				rssiMonitor.minuteMin = rssi;
+				rssiMonitor.minuteMax = rssi;
+				rssiMonitor.minuteStart = millis();
+				rssiMonitor.hasData = true;
+			} else {
+				if (rssi < rssiMonitor.minuteMin) rssiMonitor.minuteMin = rssi;
+				if (rssi > rssiMonitor.minuteMax) rssiMonitor.minuteMax = rssi;
+			}
+			static uint32_t lastBarUpdate = 0;
+			uint32_t now = millis();
+			if (now - lastBarUpdate >= 50 && rxtask.receiveResult == 0xFFFF) {
+				lastBarUpdate = now;
+				sonde.sondeList[rxtask.currentSonde].rssi = rssi;
+				rxtask.receiveResult = RX_UPDATERSSI;
+			}
+			delay(5);
 		}
 		value = readRegister(REG_IRQ_FLAGS2);
 	}

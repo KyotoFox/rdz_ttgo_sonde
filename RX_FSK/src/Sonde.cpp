@@ -21,6 +21,7 @@
 #include "conn-sondeseeker.h"
 
 RXTask rxtask = { -1, -1, -1, 0xFFFF, 0 };
+RssiMonitor rssiMonitor = { 0, 0, 0, 0, false };
 
 const char *evstring[]={"NONE", "KEY1S", "KEY1D", "KEY1M", "KEY1L", "KEY2S", "KEY2D", "KEY2M", "KEY2L",
 				   "VIEWTO", "RXTO", "NORXTO", "(max)"};
@@ -575,6 +576,8 @@ void Sonde::setup() {
 		sonde.currentSonde = rxtask.currentSonde;
 	}
 
+	rssiMonitor.hasData = false;
+
 	// update receiver config
 	LOG_I(TAG, "Sonde::setup() start on index %d\n", rxtask.currentSonde);
 	switch(sondeList[rxtask.currentSonde].type) {
@@ -702,8 +705,19 @@ rxloop:
 	}
 	if( rxtask.receiveResult == RX_UPDATERSSI ) {
 		rxtask.receiveResult = 0xFFFF;
-		LOG_I(TAG, "RSSI update: %d/2\n", sonde.si()->rssi);
+		//LOG_I(TAG, "RSSI update: %d/2\n", sonde.si()->rssi);
 		disp.updateDisplayRSSI();
+		if (rssiMonitor.hasData && millis() - rssiMonitor.minuteStart >= 60000) {
+#if FEATURE_MQTT
+			connMQTT.publishRssiMinMax(
+				sonde.si()->freq,
+				rssiMonitor.minuteMin,
+				rssiMonitor.minuteMax);
+#endif
+			rssiMonitor.minuteMin = rssiMonitor.liveRssi;
+			rssiMonitor.minuteMax = rssiMonitor.liveRssi;
+			rssiMonitor.minuteStart = millis();
+		}
 		goto rxloop;
 	}
 
