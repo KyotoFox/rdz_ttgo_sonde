@@ -1,0 +1,52 @@
+// Protobuf definition for rdz_ttgo_sonde BLE characteristic data.
+//
+// This file is the canonical reference for the binary format sent via
+// BLE notifications. It is NOT compiled as part of the firmware build --
+// the ESP32 side uses a minimal hand-written encoder (see BLE.cpp).
+// Use this file with protoc on the client side (iOS / Android / desktop)
+// to generate decoders in your language of choice.
+//
+// Field numbers 1-15 use single-byte tags on the wire and carry the
+// highest-priority telemetry. Fields 16+ use two-byte tags.
+//
+// Float fields that are unknown/invalid (NaN on the device) are omitted
+// from the encoded message entirely. Check field presence on the client
+// (proto3 `optional` → has_* accessor) to distinguish "not available"
+// from a true zero value.
+
+syntax = "proto3";
+
+package rdzsonde;
+
+message SondeData {
+  // --- High-priority fields (1-byte tags) ---
+  optional string serial             = 1;   // serial number (max 12 chars)
+  optional float  latitude           = 2;   // [deg]
+  optional float  longitude          = 3;   // [deg]
+  optional float  altitude           = 4;   // [m]
+  optional float  vertical_speed     = 5;   // [m/s]
+  optional float  horizontal_speed   = 6;   // [m/s]
+  optional float  direction          = 7;   // heading [0..360 deg]
+  optional string type               = 8;   // sonde type (e.g. "RS41-SGP")
+  optional uint32 frame              = 9;   // raw frame counter from sonde
+  optional uint32 time               = 10;  // GPS time [unix epoch]
+  optional float  frequency          = 11;  // receive frequency [MHz]
+  optional float  rssi               = 12;  // raw RSSI (multiply by -0.5 for dBm)
+  optional uint32 satellites         = 13;  // GPS satellite count
+  optional float  temperature        = 14;  // [°C]
+  optional float  humidity           = 15;  // relative humidity [%]
+
+  // --- Secondary fields (2-byte tags) ---
+  optional float  pressure           = 16;  // [hPa]
+  optional string sonde_id           = 17;  // sonde ID (max 10 chars)
+  optional sint32 virtual_frame      = 18;  // virtual frame (may differ from frame)
+  optional sint32 afc                = 19;  // AFC correction [Hz]
+  optional uint32 launch_kill_timer  = 20;  // launch kill-timer
+  optional uint32 burst_kill_timer   = 21;  // burst kill-timer
+  optional uint32 count_kill_timer   = 22;  // count kill-timer
+  optional uint32 kill_timer_ref     = 23;  // frame # of last count kill-timer tx
+  optional string launch_site        = 24;  // launch site name (max 18 chars)
+  optional uint32 rx_result          = 25;  // last RX result status
+  optional float  battery_voltage    = 26;  // [V]
+  optional uint32 position_valid     = 27;  // validity bitmask for position fields
+}
