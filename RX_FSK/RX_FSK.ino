@@ -714,7 +714,9 @@ const char *createLiveJson() {
 
   strcat(ptr, "}");
 
+#if FEATURE_BLE
   connBLE.updateSonde(s); // TODO: Testing BLE update without active sondes
+#endif
 
   return message;
 }
@@ -3457,7 +3459,9 @@ void loop() {
 
   Log.handleImprov();
 
+#if FEATURE_BLE
   connBLE.loop();
+#endif
 
 #ifndef REMOVE_ALL_FOR_TESTING
   switch (mainState) {
